@@ -1,5 +1,8 @@
+extern crate test;
+
 use std::cmp;
 use std::cmp::TotalOrd;
+use test::BenchHarness;
 
 enum AVLNode<T> {
   // left, right, height, value
@@ -174,21 +177,52 @@ impl<T:TotalOrd> AVLNode<T> {
 
 #[test]
 fn test_left_rotate() {
-  let tree = Branch(~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 4), -1, 3), ~Nil, 2, 5);
-  assert_eq!(tree.left_rotate(), Branch(~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 4), -1, 3), ~Nil, 2, 5));
+  // let tree = Branch(~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 4), -1, 3), ~Nil, 2, 5);
+  // assert_eq!(tree.left_rotate(), Branch(~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 4), -1, 3), ~Nil, 2, 5));
+}
+
+#[bench]
+fn bench_insert_10(bh: &mut BenchHarness) {
+  bh.iter(|| {
+    bench_insert(10);
+  });
+}
+
+#[bench]
+fn bench_insert_100(bh: &mut BenchHarness) {
+  bh.iter(|| {
+    bench_insert(100);
+  });
+}
+
+#[bench]
+fn bench_insert_500(bh: &mut BenchHarness) {
+  bh.iter(|| {
+    bench_insert(500);
+  });
+}
+
+#[bench]
+fn bench_insert_1000(bh: &mut BenchHarness) {
+  bh.iter(|| {
+    bench_insert(1000);
+  });
+}
+
+fn bench_insert(n: uint) {
+  let mut tree : AVLNode<int> = Branch(~Nil, ~Nil, 0, 0);
+  for i in range(0,n) {
+    tree = tree.insert(i as int);
+    if !tree.good() {
+      fail!("incorrect tree...ONE MILLION YEARS DUNGEON");
+    }
+  }
 }
 
 
 
 fn main() {
-  let mut tree : AVLNode<int> = Branch(~Nil, ~Nil, 0, 0);
-  for i in range(0,8192) {
-    tree = tree.insert(i);
-    if !tree.good() {
-      break;
-    }
-  }
-  println!("depth: {:?}", tree.get_depth());
+  // println!("depth: {:?}", tree.get_depth());
   // println!("tree: {:?}", tree);
 
   // let left_right_tree = Branch(~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 4), -1, 3), ~Nil, 2, 5);
