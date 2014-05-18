@@ -1,12 +1,12 @@
-extern crate test;
+extern crate time;
 
 use std::cmp;
 use std::cmp::TotalOrd;
-use test::BenchHarness;
+use time::precise_time_ns;
 
 enum AVLNode<T> {
   // left, right, height, value
-  Branch(~AVLNode<T>, ~AVLNode<T>, int, T),
+  Branch(Box<AVLNode<T>>, Box<AVLNode<T>>, int, T),
   Nil
 }
 
@@ -28,16 +28,20 @@ impl<T:TotalOrd> AVLNode<T> {
       Branch(left, right, height, value) => {
         let (newLeft, newRight) = match insValue.cmp(&value) {
           Equal => (left, right),
-          Less => (~left.insert(insValue), right),
-          Greater => (left, ~right.insert(insValue))
+          Less => (box left.insert(insValue), right),
+          Greater => (left, box right.insert(insValue))
         };
         let newHeight = cmp::max(newLeft.get_height(), newRight.get_height()) + 1;
 
         // if newHeight is not old height balance could have changed
-        Branch(newLeft, newRight, newHeight, value).balance()
+        if newHeight != height {
+          Branch(newLeft, newRight, newHeight, value).balance()
+        } else {
+          Branch(newLeft, newRight, newHeight, value)
+        }
       }
       Nil => {
-        Branch(~Nil, ~Nil, 0, insValue)
+        Branch(box Nil, box Nil, 0, insValue)
       }
     }
   }
@@ -48,13 +52,13 @@ impl<T:TotalOrd> AVLNode<T> {
       Branch(left, right, height, value) => {
         if balance > 1 {
           if left.get_balance() == -1 {
-            return Branch(~left.left_rotate(), right, height, value).right_rotate();
+            return Branch(box left.left_rotate(), right, height, value).right_rotate();
           } else {
             return Branch(left, right, height, value).right_rotate();
           }
         } else if balance < -1 {
           if right.get_balance() == 1 {
-            return Branch(left, ~right.right_rotate(), height, value).left_rotate();
+            return Branch(left, box right.right_rotate(), height, value).left_rotate();
           } else {
             return Branch(left, right, height, value).left_rotate();
           }
@@ -68,15 +72,15 @@ impl<T:TotalOrd> AVLNode<T> {
 
   fn left_rotate(self) -> AVLNode<T> {
     match self {
-      Branch(left, right, height, value) => {
+      Branch(left, right, _, value) => {
         match right {
-          ~Branch(pivleft, pivright, pivheight, pivval) => {
+          box Branch(pivleft, pivright, _, pivval) => {
             // the math is weird but this works
             let left_height = cmp::max(left.get_height(), pivleft.get_height()) + 1;
             let root_height = cmp::max(left_height + 1, pivright.get_height());
-            return Branch(~Branch(left, pivleft, left_height, value), pivright, root_height, pivval);
+            return Branch(box Branch(left, pivleft, left_height, value), pivright, root_height, pivval);
           },
-          ~Nil => fail!("nope")
+          box Nil => fail!("nope")
         }
       },
       Nil => fail!("not even once")
@@ -86,15 +90,15 @@ impl<T:TotalOrd> AVLNode<T> {
 
   fn right_rotate(self) -> AVLNode<T> {
     match self {
-      Branch(left, right, height, value) => {
+      Branch(left, right, _, value) => {
         match left {
-          ~Branch(pivleft, pivright, pivheight, pivval) => {
+          box Branch(pivleft, pivright, _, pivval) => {
             let right_height = cmp::max(right.get_height(), pivright.get_height()) + 1;
             let root_height = cmp::max(right_height + 1, pivleft.get_height());
 
-            return Branch(pivleft, ~Branch(pivright, right, right_height, value), root_height, pivval);
+            return Branch(pivleft, box Branch(pivright, right, right_height, value), root_height, pivval);
           },
-          ~Nil => fail!("no")
+          box Nil => fail!("no")
         }
       },
       Nil => fail!("not even once")
@@ -145,22 +149,22 @@ impl<T:TotalOrd> AVLNode<T> {
     match self {
       &Branch(ref left, ref right, height, ref value) => {
         match left {
-          &~Branch(_, _, _, ref leftValue) => {
+          &box Branch(_, _, _, ref leftValue) => {
             if leftValue > value {
               println!("{:?} is not less than {:?}", leftValue, value);
               return false;
             }
           },
-          &~Nil => {}
+          &box Nil => {}
         }
         match right {
-          &~Branch(_, _, _, ref rightValue) => {
+          &box Branch(_, _, _, ref rightValue) => {
             if rightValue < value {
               println!("{:?} is not greater than {:?}", rightValue, value);
               return false;
             }
           },
-          &~Nil => {}
+          &box Nil => {}
         }
         let trueHeight = cmp::max(left.get_depth(), right.get_depth());
         if trueHeight != height {
@@ -177,60 +181,36 @@ impl<T:TotalOrd> AVLNode<T> {
 
 #[test]
 fn test_left_rotate() {
-  // let tree = Branch(~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 4), -1, 3), ~Nil, 2, 5);
-  // assert_eq!(tree.left_rotate(), Branch(~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 4), -1, 3), ~Nil, 2, 5));
-}
-
-#[bench]
-fn bench_insert_10(bh: &mut BenchHarness) {
-  bh.iter(|| {
-    bench_insert(10);
-  });
-}
-
-#[bench]
-fn bench_insert_100(bh: &mut BenchHarness) {
-  bh.iter(|| {
-    bench_insert(100);
-  });
-}
-
-#[bench]
-fn bench_insert_500(bh: &mut BenchHarness) {
-  bh.iter(|| {
-    bench_insert(500);
-  });
-}
-
-#[bench]
-fn bench_insert_1000(bh: &mut BenchHarness) {
-  bh.iter(|| {
-    bench_insert(1000);
-  });
+  // let tree = Branch(box Branch(box Nil, box Branch(box Nil, box Nil, 0, 4), -1, 3), box Nil, 2, 5);
+  // assert_eq!(tree.left_rotate(), Branch(box Branch(box Nil, box Branch(box Nil, box Nil, 0, 4), -1, 3), box Nil, 2, 5));
 }
 
 fn bench_insert(n: uint) {
-  let mut tree : AVLNode<int> = Branch(~Nil, ~Nil, 0, 0);
+  let mut tree : AVLNode<int> = Branch(box Nil, box Nil, 0, 0);
   for i in range(0,n) {
     tree = tree.insert(i as int);
-    if !tree.good() {
-      fail!("incorrect tree...ONE MILLION YEARS DUNGEON");
-    }
   }
 }
 
 
 
 fn main() {
+  for i in range(1,16) {
+    let count = 1 << i;
+    let start = precise_time_ns();
+    bench_insert(count);
+    let end = precise_time_ns();
+    println!("({}, {}),", count, end-start);
+  }
   // println!("depth: {:?}", tree.get_depth());
   // println!("tree: {:?}", tree);
 
-  // let left_right_tree = Branch(~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 4), -1, 3), ~Nil, 2, 5);
-  // tree = Branch(~Nil, ~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 3), -1, 2), -2, 1);
+  // let left_right_tree = Branch(box Branch(box Nil, box Branch(box Nil, box Nil, 0, 4), -1, 3), box Nil, 2, 5);
+  // tree = Branch(box Nil, box Branch(box Nil, box Branch(box Nil, box Nil, 0, 3), -1, 2), -2, 1);
   // println!("tree: {:?}", tree);
   // println!("tree: {:?}", tree.left_rotate());
-  // println!("left_rotate left child: {:?}", Branch(~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 4), -1, 3).left_rotate(), ~Nil, 2, 5));
+  // println!("left_rotate left child: {:?}", Branch(box Branch(box Nil, box Branch(box Nil, box Nil, 0, 4), -1, 3).left_rotate(), box Nil, 2, 5));
   // println!("bal?: {:?}", tree.balance());
-  // println!("bal: {:?}", Branch(~Branch(~Nil, ~Branch(~Nil, ~Nil, 0, 4), -1, 3).left_rotate(), ~Nil, 2, 5).right_rotate());
+  // println!("bal: {:?}", Branch(box Branch(box Nil, box Branch(box Nil, box Nil, 0, 4), -1, 3).left_rotate(), box Nil, 2, 5).right_rotate());
 }
 
